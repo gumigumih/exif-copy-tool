@@ -1,5 +1,5 @@
 #define MyAppName "ExifCopyTool"
-#define MyAppVersion "0.10.0"
+#define MyAppVersion "0.12.0"
 #define MyAppPublisher "ぐみ ( meggumi.com )"
 #define MyAppExeName "ExifCopyTool.exe"
 
@@ -18,7 +18,7 @@ DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer
-OutputBaseFilename=ExifCopyToolSetup_v101
+OutputBaseFilename=ExifCopyToolSetup_v12
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
