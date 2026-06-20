@@ -31,7 +31,7 @@ jobs:
         run: |
           $iconArgs = @()
           if (Test-Path "assets/ExifCopyTool.ico") {
-            $iconArgs = @("--icon", "assets/ExifCopyTool.ico")
+            $iconArgs = @("--icon", "assets/ExifCopyTool.ico", "--add-data", "assets/ExifCopyTool.ico;assets")
           }
           python -m PyInstaller --noconsole --onefile --name ExifCopyTool @iconArgs exif_context_app.py
 

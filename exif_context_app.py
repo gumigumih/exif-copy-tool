@@ -45,7 +45,7 @@ except Exception:
 
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 UPDATE_API_URL = "https://api.github.com/repos/gumigumih/ExifCopyTool/releases/latest"
 RELEASES_URL = "https://github.com/gumigumih/ExifCopyTool/releases"
 GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
@@ -199,6 +199,35 @@ def app_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
+
+
+def resource_dir() -> Path:
+    bundled = getattr(sys, "_MEIPASS", None)
+    if bundled:
+        return Path(str(bundled))
+    return app_dir()
+
+
+def app_icon_path() -> Path | None:
+    candidates = [
+        resource_dir() / "assets" / "ExifCopyTool.ico",
+        app_dir() / "assets" / "ExifCopyTool.ico",
+        app_dir() / "ExifCopyTool.ico",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def apply_window_icon(window: tk.Tk) -> None:
+    icon = app_icon_path()
+    if not icon:
+        return
+    try:
+        window.iconbitmap(default=str(icon))
+    except Exception:
+        pass
 
 
 def data_dir() -> Path:
@@ -427,6 +456,7 @@ def copy_to_clipboard_tk(text: str, hold_ms: int = 800) -> None:
     to succeed but leave the clipboard unchanged on some Windows environments.
     """
     root = tk.Tk()
+    apply_window_icon(root)
     root.withdraw()
     root.clipboard_clear()
     root.clipboard_append(text)
@@ -862,6 +892,7 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("EXIFコピー 設定")
+        apply_window_icon(self)
         self.geometry("920x720")
         self.formats = load_formats()
         self.settings = load_settings()
