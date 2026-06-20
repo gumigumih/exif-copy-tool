@@ -1,5 +1,5 @@
 #define MyAppName "ExifCopyTool"
-#define MyAppVersion "0.13.0"
+#define MyAppVersion "0.14.0"
 #define MyAppPublisher "ぐみ ( meggumi.com )"
 #define MyAppExeName "ExifCopyTool.exe"
 
@@ -29,7 +29,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Tasks]
-Name: "contextmenu"; Description: "右クリックメニューを有効にする"; GroupDescription: "追加設定:"; Flags: checkedonce
+Name: "contextmenu"; Description: "右クリックメニューを有効にする"; GroupDescription: "追加設定:"
 Name: "desktopicon"; Description: "デスクトップにショートカットを作成"; GroupDescription: "ショートカット:"; Flags: unchecked
 
 [Files]

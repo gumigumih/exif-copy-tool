@@ -757,10 +757,9 @@ class App(tk.Tk):
         options.pack(fill="x", pady=(0, 10))
         self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
         ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
-        ttk.Label(options, text="表示対象: すべてのファイル").grid(row=1, column=0, sticky="w", pady=(8, 0))
         options.columnconfigure(0, weight=1)
         self.status_var = tk.StringVar(value="")
-        ttk.Label(options, textvariable=self.status_var).grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
 
         body = ttk.Frame(top)
         body.pack(fill="both", expand=True)

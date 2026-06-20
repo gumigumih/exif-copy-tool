@@ -10,7 +10,6 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 4. 任意のファイルを右クリック → EXIF情報をコピー → フォーマットを選択
 
 ■ 右クリック登録
-- デフォルトで「すべてのファイル」に表示します
 - 登録先は HKCU\Software\Classes\*\shell\ExifCopyTool と HKCU\Software\Classes\AllFilesystemObjects\shell\ExifCopyTool です
 - EXIFが無いファイルを選んだ場合は、取得できる情報のみ、または空欄としてコピーされます
 
