@@ -32,6 +32,7 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 - コピー結果をWindows通知で表示します
 - アンインストール時に右クリックメニューも解除します
 - 設定画面から GitHub Releases の更新確認ができます
+- privateリポジトリでは未認証のアプリから最新Releaseを取得できません
 - 作者名: ぐみ ( meggumi.com )
 
 ■ exiftool.exe について

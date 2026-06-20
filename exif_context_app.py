@@ -1003,20 +1003,33 @@ class App(tk.Tk):
             latest = fetch_latest_release()
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                messagebox.showinfo("更新確認", "GitHub Releases がまだ作成されていません。")
+                messagebox.showinfo(
+                    "更新確認",
+                    "GitHub Releases を取得できませんでした。\n\n"
+                    f"現在のバージョン: {APP_VERSION}\n"
+                    "最新バージョン: 取得できません\n\n"
+                    "リポジトリがprivateの場合、アプリから未認証で更新確認できないため404になります。",
+                )
                 return
-            messagebox.showerror("更新確認エラー", str(e))
+            messagebox.showerror(
+                "更新確認エラー",
+                f"現在のバージョン: {APP_VERSION}\n最新バージョン: 取得できません\n\n{e}",
+            )
             return
         except Exception as e:
-            messagebox.showerror("更新確認エラー", str(e))
+            messagebox.showerror(
+                "更新確認エラー",
+                f"現在のバージョン: {APP_VERSION}\n最新バージョン: 取得できません\n\n{e}",
+            )
             return
 
-        tag = latest.get("tag_name") or ""
-        if tag and parse_version(tag) > parse_version(APP_VERSION):
-            if messagebox.askyesno("更新があります", f"新しいバージョン {tag} があります。配布ページを開きますか？"):
+        tag = latest.get("tag_name") or "取得できません"
+        message = f"現在のバージョン: {APP_VERSION}\n最新バージョン: {tag}"
+        if tag != "取得できません" and parse_version(tag) > parse_version(APP_VERSION):
+            if messagebox.askyesno("更新があります", message + "\n\n配布ページを開きますか？"):
                 webbrowser.open(latest.get("html_url") or RELEASES_URL)
             return
-        messagebox.showinfo("更新確認", f"最新版です。現在のバージョン: {APP_VERSION}")
+        messagebox.showinfo("更新確認", "最新版です。\n\n" + message)
 
     def on_enabled_changed(self) -> None:
         try:
