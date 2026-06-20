@@ -42,6 +42,8 @@ except Exception:
 
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
+GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
+_GUI_MUTEX_HANDLE = None
 
 # Context menu is registered for all filesystem objects and all file types.
 # Some Windows/Explorer environments do not show entries registered only under *\shell,
@@ -730,6 +732,58 @@ def is_menu_probably_registered() -> bool:
         return False
 
 
+def acquire_gui_single_instance() -> bool:
+    """Return True only for the first settings window instance.
+
+    The context-menu "フォーマット設定を開く" action can be clicked repeatedly.
+    Multiple settings windows can overwrite formats/settings in unexpected order,
+    so the GUI is intentionally single-instance. Copy operations do not use this.
+    """
+    global _GUI_MUTEX_HANDLE
+    if os.name == "nt":
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.CreateMutexW(None, False, GUI_MUTEX_NAME)
+        if not handle:
+            return True
+        last_error = ctypes.get_last_error()
+        if last_error == 183:  # ERROR_ALREADY_EXISTS
+            try:
+                kernel32.CloseHandle(handle)
+            except Exception:
+                pass
+            return False
+        _GUI_MUTEX_HANDLE = handle
+        return True
+
+    # Non-Windows fallback for development.
+    lock_path = data_dir() / "settings_window.lock"
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode("ascii", errors="ignore"))
+        os.close(fd)
+        _GUI_MUTEX_HANDLE = str(lock_path)
+        return True
+    except FileExistsError:
+        return False
+
+
+def release_gui_single_instance() -> None:
+    global _GUI_MUTEX_HANDLE
+    if not _GUI_MUTEX_HANDLE:
+        return
+    if os.name == "nt":
+        try:
+            ctypes.WinDLL("kernel32", use_last_error=True).CloseHandle(_GUI_MUTEX_HANDLE)
+        except Exception:
+            pass
+    else:
+        try:
+            Path(str(_GUI_MUTEX_HANDLE)).unlink(missing_ok=True)
+        except Exception:
+            pass
+    _GUI_MUTEX_HANDLE = None
+
+
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -741,6 +795,7 @@ class App(tk.Tk):
         self._build()
         self._refresh_list()
         self._refresh_status()
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         # If settings says enabled but registry is missing, repair automatically on launch.
         if self.settings.get("context_menu_enabled") and winreg is not None and not is_menu_probably_registered():
             try:
@@ -748,6 +803,10 @@ class App(tk.Tk):
                 self.status_var.set("右クリックメニューを自動修復しました。")
             except Exception as e:
                 self.status_var.set(f"右クリックメニュー自動修復に失敗: {e}")
+
+    def on_close(self) -> None:
+        release_gui_single_instance()
+        self.destroy()
 
     def _build(self) -> None:
         top = ttk.Frame(self, padding=10)
@@ -936,7 +995,17 @@ def main() -> None:
                 write_context_log(fmt if 'fmt' in locals() else '', paths if 'paths' in locals() else [], '', traceback.format_exc())
                 raise
             return
-        App().mainloop()
+        if not acquire_gui_single_instance():
+            try:
+                messagebox.showinfo("EXIFコピー", "設定画面はすでに開いています。")
+            except Exception:
+                pass
+            return
+        app = App()
+        try:
+            app.mainloop()
+        finally:
+            release_gui_single_instance()
     except Exception as e:
         log = data_dir() / "error.log"
         log.write_text(traceback.format_exc(), encoding="utf-8")
