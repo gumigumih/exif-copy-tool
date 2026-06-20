@@ -133,6 +133,28 @@ EXIFTOOL_TAGS = [
 
 COMMON_KEYS = list(dict.fromkeys(EXIFTOOL_TAGS + ["Source", "Error"]))
 
+PREVIEW_SAMPLE_EXIF = {
+    "DateTimeOriginal": "2026:06:21 10:30:00",
+    "CreateDate": "2026:06:21 10:30:00",
+    "Make": "SONY",
+    "Model": "ILCE-7M4",
+    "LensModel": "FE 35mm F1.4 GM",
+    "LensID": "FE 35mm F1.4 GM",
+    "LensInfo": "35mm f/1.4",
+    "FNumber": "1.8",
+    "ApertureValue": "1.8",
+    "ExposureTime": "1/250",
+    "ShutterSpeedValue": "1/250",
+    "ISO": "400",
+    "FocalLength": "35 mm",
+    "FocalLengthIn35mmFormat": "35 mm",
+    "Artist": "Gumi",
+    "Copyright": "Gumi",
+    "FileName": "sample.jpg",
+    "Source": "Preview",
+    "Error": "",
+}
+
 EXIFREAD_ALIASES = {
     "EXIF DateTimeOriginal": "DateTimeOriginal",
     "Image DateTime": "CreateDate",
@@ -788,7 +810,7 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("EXIFコピー 設定")
-        self.geometry("820x640")
+        self.geometry("920x720")
         self.formats = load_formats()
         self.settings = load_settings()
         self.selected_index = 0
@@ -842,15 +864,17 @@ class App(tk.Tk):
         ttk.Label(right, text="テンプレート（例: {Make}, {Model}, {LensModel}, {FocalLength}, {FNumber}, {ExposureTime}, {ISO}, {DateTimeOriginal}, {FileName}, {Source}, {Error}）").pack(anchor="w")
         self.text = tk.Text(right, height=12, wrap="word")
         self.text.pack(fill="both", expand=True)
+        self.text.bind("<<Modified>>", self.on_template_modified)
 
         sample_frame = ttk.Frame(right)
         sample_frame.pack(fill="x", pady=8)
         ttk.Button(sample_frame, text="保存", command=self.save_current).pack(side="left")
+        ttk.Button(sample_frame, text="プレビュー更新", command=self.update_preview).pack(side="left", padx=(6, 0))
         ttk.Button(sample_frame, text="画像でテスト＆コピー", command=self.test_image).pack(side="left", padx=6)
         ttk.Button(sample_frame, text="EXIF診断", command=self.diagnose_image).pack(side="left")
 
-        ttk.Label(right, text="テスト出力 / 診断").pack(anchor="w")
-        self.preview = tk.Text(right, height=10, wrap="word")
+        ttk.Label(right, text="フォーマットプレビュー / テスト出力 / 診断").pack(anchor="w")
+        self.preview = tk.Text(right, height=12, wrap="word")
         self.preview.pack(fill="both")
 
     def _refresh_status(self) -> None:
@@ -904,6 +928,23 @@ class App(tk.Tk):
         self.name_var.set(fmt["name"])
         self.text.delete("1.0", "end")
         self.text.insert("1.0", fmt["template"])
+        self.text.edit_modified(False)
+        self.update_preview()
+
+    def current_template(self) -> str:
+        return self.text.get("1.0", "end").strip()
+
+    def on_template_modified(self, _event: Any = None) -> None:
+        if self.text.edit_modified():
+            self.text.edit_modified(False)
+            self.after_idle(self.update_preview)
+
+    def update_preview(self) -> None:
+        text = render_template(self.current_template(), PREVIEW_SAMPLE_EXIF)
+        if not text:
+            text = "プレビューできる出力がありません。テンプレートに {Make} などのタグを入力してください。"
+        self.preview.delete("1.0", "end")
+        self.preview.insert("1.0", text)
 
     def save_current(self, show_message: bool = True) -> None:
         if not self.formats:
@@ -912,7 +953,7 @@ class App(tk.Tk):
         if not name:
             messagebox.showerror("エラー", "名前を入力してください")
             return
-        self.formats[self.selected_index] = {"name": name, "template": self.text.get("1.0", "end").strip()}
+        self.formats[self.selected_index] = {"name": name, "template": self.current_template()}
         save_formats(self.formats)
         self._refresh_list()
         try:
