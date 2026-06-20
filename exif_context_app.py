@@ -459,6 +459,31 @@ def copy_to_clipboard_clip_exe(text: str) -> None:
     _run_hidden(["cmd", "/c", "clip"], input_text=text)
 
 
+def show_toast(title: str, message: str) -> None:
+    if os.name != "nt":
+        return
+    script = """
+Add-Type -AssemblyName System.Windows.Forms
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.BalloonTipTitle = $args[0]
+$notify.BalloonTipText = $args[1]
+$notify.Visible = $true
+$notify.ShowBalloonTip(3000)
+Start-Sleep -Milliseconds 3500
+$notify.Dispose()
+"""
+    try:
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script, title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        pass
+
+
 def copy_to_clipboard(text: str) -> None:
     """Copy text to clipboard.
 
@@ -496,6 +521,7 @@ def copy_format(format_name: str, image_paths: List[str]) -> None:
         rendered.append(text)
     final_text = "\n\n".join(rendered)
     copy_to_clipboard(final_text)
+    show_toast(APP_TITLE, f"{len(image_paths)}件のEXIF情報をコピーしました")
     write_context_log(format_name, image_paths, final_text, None)
 
 
@@ -1049,7 +1075,9 @@ def main() -> None:
                     raise RuntimeError("画像ファイルが指定されていません")
                 copy_format(fmt, paths)
             except Exception as e:
-                write_context_log(fmt if 'fmt' in locals() else '', paths if 'paths' in locals() else [], '', traceback.format_exc())
+                err = traceback.format_exc()
+                write_context_log(fmt if 'fmt' in locals() else '', paths if 'paths' in locals() else [], '', err)
+                show_toast(APP_TITLE, "EXIF情報のコピーに失敗しました")
                 raise
             return
         if not acquire_gui_single_instance():
