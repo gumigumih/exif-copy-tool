@@ -39,3 +39,8 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 
 0.15.0:
 - 設定画面を単一インスタンス化しました。右クリックから「フォーマット設定を開く」を複数回実行しても、設定画面は1つだけ開きます。
+
+
+■ GitHub Releases 配布
+- v0.15.0 のような v 始まりのタグを push すると GitHub Actions でリリースを作成します
+- 配布物: dist\ExifCopyTool.exe / installer\ExifCopyToolSetup.exe
