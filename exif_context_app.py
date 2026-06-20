@@ -921,10 +921,15 @@ class App(tk.Tk):
         options.pack(fill="x", pady=(0, 10))
         self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
         ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
-        ttk.Button(options, text="更新確認", command=self.check_updates).grid(row=0, column=1, sticky="e")
         options.columnconfigure(0, weight=1)
         self.status_var = tk.StringVar(value="")
         ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+        app_info = ttk.LabelFrame(top, text="アプリ情報", padding=8)
+        app_info.pack(fill="x", pady=(0, 10))
+        ttk.Label(app_info, text=f"現在のバージョン: {APP_VERSION}").grid(row=0, column=0, sticky="w")
+        ttk.Button(app_info, text="更新確認", command=self.check_updates).grid(row=0, column=1, sticky="e")
+        app_info.columnconfigure(0, weight=1)
 
         body = ttk.Frame(top)
         body.pack(fill="both", expand=True)
