@@ -23,7 +23,7 @@ import tkinter as tk
 import urllib.error
 import urllib.request
 import webbrowser
-from tkinter import filedialog, messagebox, ttk
+from tkinter import messagebox, ttk
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -46,6 +46,7 @@ except Exception:
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
 APP_VERSION = "0.1.1"
+APP_USER_MODEL_ID = "gumigumih.ExifCopyTool"
 UPDATE_API_URL = "https://api.github.com/repos/gumigumih/ExifCopyTool/releases/latest"
 RELEASES_URL = "https://github.com/gumigumih/ExifCopyTool/releases"
 GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
@@ -218,6 +219,15 @@ def app_icon_path() -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def configure_windows_app_identity() -> None:
+    if os.name != "nt":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:
+        pass
 
 
 def apply_window_icon(window: tk.Tk) -> None:
@@ -917,21 +927,15 @@ class App(tk.Tk):
         top = ttk.Frame(self, padding=10)
         top.pack(fill="both", expand=True)
 
-        options = ttk.LabelFrame(top, text="右クリックメニュー", padding=8)
-        options.pack(fill="x", pady=(0, 10))
-        self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
-        ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
-        options.columnconfigure(0, weight=1)
-        self.status_var = tk.StringVar(value="")
-        ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
+        notebook = ttk.Notebook(top)
+        notebook.pack(fill="both", expand=True)
 
-        app_info = ttk.LabelFrame(top, text="アプリ情報", padding=8)
-        app_info.pack(fill="x", pady=(0, 10))
-        ttk.Label(app_info, text=f"現在のバージョン: {APP_VERSION}").grid(row=0, column=0, sticky="w")
-        ttk.Button(app_info, text="更新確認", command=self.check_updates).grid(row=0, column=1, sticky="e")
-        app_info.columnconfigure(0, weight=1)
+        format_tab = ttk.Frame(notebook, padding=10)
+        settings_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(format_tab, text="フォーマット編集")
+        notebook.add(settings_tab, text="アプリ設定")
 
-        body = ttk.Frame(top)
+        body = ttk.Frame(format_tab)
         body.pack(fill="both", expand=True)
 
         left = ttk.Frame(body)
@@ -964,16 +968,27 @@ class App(tk.Tk):
         self.tag_combo.bind("<Double-Button-1>", self.insert_selected_tag)
         self.tag_combo.bind("<Return>", self.insert_selected_tag)
 
-        sample_frame = ttk.Frame(right)
-        sample_frame.pack(fill="x", pady=8)
-        ttk.Button(sample_frame, text="保存", command=self.save_current).pack(side="left")
-        ttk.Button(sample_frame, text="プレビュー更新", command=self.update_preview).pack(side="left", padx=(6, 0))
-        ttk.Button(sample_frame, text="画像でテスト＆コピー", command=self.test_image).pack(side="left", padx=6)
-        ttk.Button(sample_frame, text="EXIF診断", command=self.diagnose_image).pack(side="left")
+        actions = ttk.Frame(right)
+        actions.pack(fill="x", pady=8)
+        ttk.Button(actions, text="保存", command=self.save_current).pack(side="left")
 
-        ttk.Label(right, text="フォーマットプレビュー / テスト出力 / 診断").pack(anchor="w")
+        ttk.Label(right, text="サンプルプレビュー").pack(anchor="w")
         self.preview = tk.Text(right, height=12, wrap="word")
         self.preview.pack(fill="both")
+
+        options = ttk.LabelFrame(settings_tab, text="右クリックメニュー", padding=8)
+        options.pack(fill="x", pady=(0, 10))
+        self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
+        ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
+        options.columnconfigure(0, weight=1)
+        self.status_var = tk.StringVar(value="")
+        ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+        app_info = ttk.LabelFrame(settings_tab, text="アプリ情報", padding=8)
+        app_info.pack(fill="x", pady=(0, 10))
+        ttk.Label(app_info, text=f"現在のバージョン: {APP_VERSION}").grid(row=0, column=0, sticky="w")
+        ttk.Button(app_info, text="更新確認", command=self.check_updates).grid(row=0, column=1, sticky="e")
+        app_info.columnconfigure(0, weight=1)
 
     def _refresh_status(self) -> None:
         if winreg is None:
@@ -1119,36 +1134,8 @@ class App(tk.Tk):
         self._refresh_list()
         self._auto_update_menu_if_enabled()
 
-    def choose_image(self) -> str:
-        return filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.jpeg *.png *.tif *.tiff *.heic *.webp"), ("All files", "*.*")])
-
-    def test_image(self) -> None:
-        self.save_current(show_message=False)
-        path = self.choose_image()
-        if not path:
-            return
-        data = read_exif(path)
-        text = render_template(self.formats[self.selected_index]["template"], data)
-        if not text:
-            text = "EXIF情報を取得できませんでした。\n" + data.get("Error", "")
-        self.preview.delete("1.0", "end")
-        self.preview.insert("1.0", text)
-        copy_to_clipboard(text)
-        messagebox.showinfo("コピーしました", "テスト出力をクリップボードにコピーしました。")
-
-    def diagnose_image(self) -> None:
-        path = self.choose_image()
-        if not path:
-            return
-        data = read_exif(path)
-        lines = [f"{k}: {v}" for k, v in data.items() if v]
-        if not lines:
-            lines = ["EXIF情報を取得できませんでした。"]
-        self.preview.delete("1.0", "end")
-        self.preview.insert("1.0", "\n".join(lines))
-
-
 def main() -> None:
+    configure_windows_app_identity()
     try:
         if "--register-context-menu" in sys.argv:
             settings = load_settings()
