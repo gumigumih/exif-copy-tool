@@ -8,6 +8,8 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 2. dist\ExifCopyTool.exe を起動
 3. 「有効にする」にチェック
 4. 任意のファイルを右クリック → EXIF情報をコピー → フォーマットを選択
+5. 設定画面ではテンプレート編集中にサンプルEXIFでプレビューできます
+6. 設定画面のEXIFタグ候補からテンプレートへタグを挿入できます
 
 ■ 右クリック登録
 - 登録先は HKCU\Software\Classes\*\shell\ExifCopyTool と HKCU\Software\Classes\AllFilesystemObjects\shell\ExifCopyTool です
@@ -25,6 +27,7 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 - Python不要
 - Windows起動時に常駐しません
 - 右クリックした時だけ ExifCopyTool.exe が起動します
+- コピー結果をWindows通知で表示します
 - アンインストール時に右クリックメニューも解除します
 - 作者名: ぐみ ( meggumi.com )
 

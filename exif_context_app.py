@@ -133,6 +133,28 @@ EXIFTOOL_TAGS = [
 
 COMMON_KEYS = list(dict.fromkeys(EXIFTOOL_TAGS + ["Source", "Error"]))
 
+PREVIEW_SAMPLE_EXIF = {
+    "DateTimeOriginal": "2026:06:21 10:30:00",
+    "CreateDate": "2026:06:21 10:30:00",
+    "Make": "SONY",
+    "Model": "ILCE-7M4",
+    "LensModel": "FE 35mm F1.4 GM",
+    "LensID": "FE 35mm F1.4 GM",
+    "LensInfo": "35mm f/1.4",
+    "FNumber": "1.8",
+    "ApertureValue": "1.8",
+    "ExposureTime": "1/250",
+    "ShutterSpeedValue": "1/250",
+    "ISO": "400",
+    "FocalLength": "35 mm",
+    "FocalLengthIn35mmFormat": "35 mm",
+    "Artist": "Gumi",
+    "Copyright": "Gumi",
+    "FileName": "sample.jpg",
+    "Source": "Preview",
+    "Error": "",
+}
+
 EXIFREAD_ALIASES = {
     "EXIF DateTimeOriginal": "DateTimeOriginal",
     "Image DateTime": "CreateDate",
@@ -437,6 +459,31 @@ def copy_to_clipboard_clip_exe(text: str) -> None:
     _run_hidden(["cmd", "/c", "clip"], input_text=text)
 
 
+def show_toast(title: str, message: str) -> None:
+    if os.name != "nt":
+        return
+    script = """
+Add-Type -AssemblyName System.Windows.Forms
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.BalloonTipTitle = $args[0]
+$notify.BalloonTipText = $args[1]
+$notify.Visible = $true
+$notify.ShowBalloonTip(3000)
+Start-Sleep -Milliseconds 3500
+$notify.Dispose()
+"""
+    try:
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script, title, message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except Exception:
+        pass
+
+
 def copy_to_clipboard(text: str) -> None:
     """Copy text to clipboard.
 
@@ -474,6 +521,7 @@ def copy_format(format_name: str, image_paths: List[str]) -> None:
         rendered.append(text)
     final_text = "\n\n".join(rendered)
     copy_to_clipboard(final_text)
+    show_toast(APP_TITLE, f"{len(image_paths)}件のEXIF情報をコピーしました")
     write_context_log(format_name, image_paths, final_text, None)
 
 
@@ -788,7 +836,7 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("EXIFコピー 設定")
-        self.geometry("820x640")
+        self.geometry("920x720")
         self.formats = load_formats()
         self.settings = load_settings()
         self.selected_index = 0
@@ -842,15 +890,26 @@ class App(tk.Tk):
         ttk.Label(right, text="テンプレート（例: {Make}, {Model}, {LensModel}, {FocalLength}, {FNumber}, {ExposureTime}, {ISO}, {DateTimeOriginal}, {FileName}, {Source}, {Error}）").pack(anchor="w")
         self.text = tk.Text(right, height=12, wrap="word")
         self.text.pack(fill="both", expand=True)
+        self.text.bind("<<Modified>>", self.on_template_modified)
+
+        tag_frame = ttk.LabelFrame(right, text="EXIFタグ", padding=6)
+        tag_frame.pack(fill="x", pady=(8, 0))
+        self.tag_var = tk.StringVar(value=EXIFTOOL_TAGS[0])
+        self.tag_combo = ttk.Combobox(tag_frame, textvariable=self.tag_var, values=COMMON_KEYS, state="readonly", width=28)
+        self.tag_combo.pack(side="left", fill="x", expand=True)
+        ttk.Button(tag_frame, text="挿入", command=self.insert_selected_tag).pack(side="left", padx=(6, 0))
+        self.tag_combo.bind("<Double-Button-1>", self.insert_selected_tag)
+        self.tag_combo.bind("<Return>", self.insert_selected_tag)
 
         sample_frame = ttk.Frame(right)
         sample_frame.pack(fill="x", pady=8)
         ttk.Button(sample_frame, text="保存", command=self.save_current).pack(side="left")
+        ttk.Button(sample_frame, text="プレビュー更新", command=self.update_preview).pack(side="left", padx=(6, 0))
         ttk.Button(sample_frame, text="画像でテスト＆コピー", command=self.test_image).pack(side="left", padx=6)
         ttk.Button(sample_frame, text="EXIF診断", command=self.diagnose_image).pack(side="left")
 
-        ttk.Label(right, text="テスト出力 / 診断").pack(anchor="w")
-        self.preview = tk.Text(right, height=10, wrap="word")
+        ttk.Label(right, text="フォーマットプレビュー / テスト出力 / 診断").pack(anchor="w")
+        self.preview = tk.Text(right, height=12, wrap="word")
         self.preview.pack(fill="both")
 
     def _refresh_status(self) -> None:
@@ -904,6 +963,30 @@ class App(tk.Tk):
         self.name_var.set(fmt["name"])
         self.text.delete("1.0", "end")
         self.text.insert("1.0", fmt["template"])
+        self.text.edit_modified(False)
+        self.update_preview()
+
+    def current_template(self) -> str:
+        return self.text.get("1.0", "end").strip()
+
+    def on_template_modified(self, _event: Any = None) -> None:
+        if self.text.edit_modified():
+            self.text.edit_modified(False)
+            self.after_idle(self.update_preview)
+
+    def update_preview(self) -> None:
+        text = render_template(self.current_template(), PREVIEW_SAMPLE_EXIF)
+        if not text:
+            text = "プレビューできる出力がありません。テンプレートに {Make} などのタグを入力してください。"
+        self.preview.delete("1.0", "end")
+        self.preview.insert("1.0", text)
+
+    def insert_selected_tag(self, _event: Any = None) -> None:
+        tag = self.tag_var.get().strip()
+        if not tag:
+            return
+        self.text.insert("insert", "{" + tag + "}")
+        self.text.focus_set()
 
     def save_current(self, show_message: bool = True) -> None:
         if not self.formats:
@@ -912,7 +995,7 @@ class App(tk.Tk):
         if not name:
             messagebox.showerror("エラー", "名前を入力してください")
             return
-        self.formats[self.selected_index] = {"name": name, "template": self.text.get("1.0", "end").strip()}
+        self.formats[self.selected_index] = {"name": name, "template": self.current_template()}
         save_formats(self.formats)
         self._refresh_list()
         try:
@@ -992,7 +1075,9 @@ def main() -> None:
                     raise RuntimeError("画像ファイルが指定されていません")
                 copy_format(fmt, paths)
             except Exception as e:
-                write_context_log(fmt if 'fmt' in locals() else '', paths if 'paths' in locals() else [], '', traceback.format_exc())
+                err = traceback.format_exc()
+                write_context_log(fmt if 'fmt' in locals() else '', paths if 'paths' in locals() else [], '', err)
+                show_toast(APP_TITLE, "EXIF情報のコピーに失敗しました")
                 raise
             return
         if not acquire_gui_single_instance():
