@@ -211,14 +211,21 @@ def resource_dir() -> Path:
 
 def app_icon_path() -> Path | None:
     candidates = [
+        app_dir() / "ExifCopyTool.ico",
         resource_dir() / "assets" / "ExifCopyTool.ico",
         app_dir() / "assets" / "ExifCopyTool.ico",
-        app_dir() / "ExifCopyTool.ico",
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
     return None
+
+
+def context_menu_icon_path() -> str:
+    icon = app_icon_path()
+    if icon:
+        return str(icon)
+    return executable_parts()[0]
 
 
 def configure_windows_app_identity() -> None:
@@ -782,7 +789,7 @@ def register_one_menu(menu_root_key: str, formats: List[Dict[str, str]]) -> None
     root = winreg.CreateKey(winreg.HKEY_CURRENT_USER, menu_root_key)
     winreg.SetValueEx(root, "MUIVerb", 0, winreg.REG_SZ, "EXIF情報をコピー")
     winreg.SetValueEx(root, "SubCommands", 0, winreg.REG_SZ, "")
-    winreg.SetValueEx(root, "Icon", 0, winreg.REG_SZ, exe_parts[0])
+    winreg.SetValueEx(root, "Icon", 0, winreg.REG_SZ, context_menu_icon_path())
     winreg.SetValueEx(root, "AppliesTo", 0, winreg.REG_SZ, "System.FileName:\"*.jpg\" OR System.FileName:\"*.jpeg\" OR System.FileName:\"*.png\" OR System.FileName:\"*.tif\" OR System.FileName:\"*.tiff\" OR System.FileName:\"*.heic\" OR System.FileName:\"*.webp\"")
     shell_key = winreg.CreateKey(root, "shell")
     for idx, fmt in enumerate(formats):

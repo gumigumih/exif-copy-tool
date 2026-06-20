@@ -37,6 +37,7 @@ Name: "desktopicon"; Description: "デスクトップにショートカットを
 
 [Files]
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "assets\ExifCopyTool.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "exiftool.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
