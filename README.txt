@@ -27,6 +27,7 @@ Windowsの右クリックメニューから、ファイルのEXIF情報をテン
 - Windows起動時に常駐しません
 - 右クリックした時だけ ExifCopyTool.exe が起動します
 - アンインストール時に右クリックメニューも解除します
+- 設定画面から GitHub Releases の更新確認ができます
 - 作者名: ぐみ ( meggumi.com )
 
 ■ exiftool.exe について

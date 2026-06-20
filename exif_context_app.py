@@ -20,6 +20,9 @@ import traceback
 import time
 import ctypes
 import tkinter as tk
+import urllib.error
+import urllib.request
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -42,6 +45,9 @@ except Exception:
 
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
+APP_VERSION = "0.15.0"
+UPDATE_API_URL = "https://api.github.com/repos/gumigumih/ExifCopyTool/releases/latest"
+RELEASES_URL = "https://github.com/gumigumih/ExifCopyTool/releases"
 GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
 _GUI_MUTEX_HANDLE = None
 
@@ -369,6 +375,26 @@ def render_template(template: str, data: Dict[str, str]) -> str:
     lines = [line.rstrip() for line in text.splitlines()]
     bad = {"/ /", "//", "F", "ISO", "Camera:", "Lens:", "Settings: / F / / ISO", "Date:"}
     return "\n".join([line for line in lines if line.strip() and line.strip() not in bad]).strip()
+
+
+def parse_version(value: str) -> Tuple[int, ...]:
+    text = value.strip().lstrip("vV")
+    parts: List[int] = []
+    for part in text.split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        parts.append(int(digits or "0"))
+    return tuple(parts)
+
+
+def fetch_latest_release() -> Dict[str, str]:
+    req = urllib.request.Request(UPDATE_API_URL, headers={"User-Agent": APP_NAME})
+    with urllib.request.urlopen(req, timeout=8) as res:
+        data = json.loads(res.read().decode("utf-8"))
+    return {
+        "tag_name": str(data.get("tag_name", "")),
+        "html_url": str(data.get("html_url", RELEASES_URL)),
+        "name": str(data.get("name", "")),
+    }
 
 
 def copy_to_clipboard_tk(text: str, hold_ms: int = 800) -> None:
@@ -816,6 +842,7 @@ class App(tk.Tk):
         options.pack(fill="x", pady=(0, 10))
         self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
         ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
+        ttk.Button(options, text="更新確認", command=self.check_updates).grid(row=0, column=1, sticky="e")
         options.columnconfigure(0, weight=1)
         self.status_var = tk.StringVar(value="")
         ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
@@ -880,6 +907,26 @@ class App(tk.Tk):
             self.listbox.selection_clear(0, "end")
             self.listbox.selection_set(self.selected_index)
             self.load_selected()
+
+    def check_updates(self) -> None:
+        try:
+            latest = fetch_latest_release()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                messagebox.showinfo("更新確認", "GitHub Releases がまだ作成されていません。")
+                return
+            messagebox.showerror("更新確認エラー", str(e))
+            return
+        except Exception as e:
+            messagebox.showerror("更新確認エラー", str(e))
+            return
+
+        tag = latest.get("tag_name") or ""
+        if tag and parse_version(tag) > parse_version(APP_VERSION):
+            if messagebox.askyesno("更新があります", f"新しいバージョン {tag} があります。配布ページを開きますか？"):
+                webbrowser.open(latest.get("html_url") or RELEASES_URL)
+            return
+        messagebox.showinfo("更新確認", f"最新版です。現在のバージョン: {APP_VERSION}")
 
     def on_enabled_changed(self) -> None:
         try:
