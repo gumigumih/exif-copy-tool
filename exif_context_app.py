@@ -4,7 +4,7 @@ EXIF Copy Tool - Windows context menu utility.
 Features:
 - GUI for editing output formats
 - Enable/disable Windows right-click menu with a checkbox
-- Choose which file extensions should show the context menu
+- Choose which file extensions should show the context menu, resolving file-association classes automatically
 - Automatically updates context menu when formats are saved while enabled
 - Copy EXIF text to clipboard from context menu
 - Uses bundled exiftool.exe when present; falls back to exifread/Pillow
@@ -43,17 +43,46 @@ except Exception:
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
 
-# Context menu is registered per extension.
+# Context menu is registered per selected extension and its resolved file-association class.
 # Registering for all files (*) is intentionally avoided because it is unreliable
 # across Windows 10/11 and Explorer association settings.
 MENU_KEY_IMAGE = r"Software\Classes\SystemFileAssociations\image\shell\ExifCopyTool"
-DEFAULT_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp"]
-KNOWN_EXTENSIONS = sorted(set(DEFAULT_EXTENSIONS + [".jpe", ".jfif", ".bmp", ".gif", ".avif", ".raw", ".arw", ".cr2", ".cr3", ".nef", ".nrw", ".orf", ".rw2", ".dng", ".raf", ".pef", ".srw"]))
 
-def menu_key_for_extension(ext: str) -> str:
+STANDARD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp"]
+RAW_EXTENSIONS = [
+    # Sony / Canon / Nikon / Fujifilm / Olympus-OM / Panasonic / Pentax / Sigma / Hasselblad / Leica / Phase One / RED etc.
+    ".arw", ".srf", ".sr2",
+    ".crw", ".cr2", ".cr3",
+    ".nef", ".nrw",
+    ".raf",
+    ".orf", ".ori",
+    ".rw2", ".rwl",
+    ".pef", ".ptx",
+    ".x3f",
+    ".3fr", ".fff",
+    ".dng",
+    ".iiq", ".eip",
+    ".r3d",
+    ".erf", ".mef", ".mos", ".mrw", ".dcr", ".k25", ".kdc", ".srw", ".bay", ".cap",
+    ".raw",
+]
+DEFAULT_EXTENSIONS = STANDARD_EXTENSIONS + RAW_EXTENSIONS
+KNOWN_EXTENSIONS = sorted(set(DEFAULT_EXTENSIONS + [".jpe", ".jfif", ".bmp", ".gif", ".avif"]))
+
+def menu_key_for_system_extension(ext: str) -> str:
     return rf"Software\Classes\SystemFileAssociations\{ext}\shell\ExifCopyTool"
 
-ALL_MENU_KEYS = [MENU_KEY_IMAGE] + [menu_key_for_extension(ext) for ext in KNOWN_EXTENSIONS]
+def menu_key_for_direct_extension(ext: str) -> str:
+    return rf"Software\Classes\{ext}\shell\ExifCopyTool"
+
+def menu_key_for_progid(progid: str) -> str:
+    return rf"Software\Classes\{progid}\shell\ExifCopyTool"
+
+# Backward-compatible alias for older code paths.
+def menu_key_for_extension(ext: str) -> str:
+    return menu_key_for_system_extension(ext)
+
+ALL_MENU_KEYS = [MENU_KEY_IMAGE] + [menu_key_for_system_extension(ext) for ext in KNOWN_EXTENSIONS]
 
 DEFAULT_SETTINGS = {
     "context_menu_enabled": False,
@@ -515,16 +544,108 @@ def extension_text(extensions: List[str]) -> str:
     return ", ".join(normalize_extensions(extensions))
 
 
+def read_default_value(root: Any, subkey: str) -> str:
+    if winreg is None:
+        return ""
+    try:
+        with winreg.OpenKey(root, subkey, 0, winreg.KEY_READ) as key:  # type: ignore
+            value, _ = winreg.QueryValueEx(key, "")  # type: ignore
+            return str(value).strip()
+    except Exception:
+        return ""
+
+def read_named_value(root: Any, subkey: str, name: str) -> str:
+    if winreg is None:
+        return ""
+    try:
+        with winreg.OpenKey(root, subkey, 0, winreg.KEY_READ) as key:  # type: ignore
+            value, _ = winreg.QueryValueEx(key, name)  # type: ignore
+            return str(value).strip()
+    except Exception:
+        return ""
+
+def resolve_progids_for_extension(ext: str) -> List[str]:
+    """Return likely Explorer association class names for an extension.
+
+    Windows often shows context-menu verbs from the associated ProgID
+    rather than from the extension key itself. RAW formats such as .arw,
+    .nef, .cr3 commonly need this path.
+    """
+    if winreg is None:
+        return []
+    candidates: List[str] = []
+
+    # UserChoice is the strongest signal on modern Windows.
+    user_choice = rf"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{ext}\UserChoice"
+    progid = read_named_value(winreg.HKEY_CURRENT_USER, user_choice, "ProgId")
+    if progid:
+        candidates.append(progid)
+
+    # Per-user class default.
+    progid = read_default_value(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{ext}")
+    if progid:
+        candidates.append(progid)
+
+    # Merged HKCR class default.
+    progid = read_default_value(winreg.HKEY_CLASSES_ROOT, ext)
+    if progid:
+        candidates.append(progid)
+
+    # OpenWithProgids may contain additional class names.
+    for root, subkey in [
+        (winreg.HKEY_CURRENT_USER, rf"Software\Classes\{ext}\OpenWithProgids"),
+        (winreg.HKEY_CLASSES_ROOT, rf"{ext}\OpenWithProgids"),
+    ]:
+        try:
+            with winreg.OpenKey(root, subkey, 0, winreg.KEY_READ) as key:  # type: ignore
+                idx = 0
+                while True:
+                    try:
+                        name, _, _ = winreg.EnumValue(key, idx)  # type: ignore
+                        if name:
+                            candidates.append(str(name).strip())
+                        idx += 1
+                    except OSError:
+                        break
+        except Exception:
+            pass
+
+    result: List[str] = []
+    for item in candidates:
+        if not item or item in result:
+            continue
+        # Do not allow path separators into registry paths.
+        if any(ch in item for ch in ["\\", "/", "*", "?", '"', "<", ">", "|"]):
+            continue
+        result.append(item)
+    return result
+
+def menu_keys_for_extension(ext: str, include_resolved_progids: bool = True) -> List[str]:
+    keys = [menu_key_for_system_extension(ext), menu_key_for_direct_extension(ext)]
+    if include_resolved_progids:
+        for progid in resolve_progids_for_extension(ext):
+            keys.append(menu_key_for_progid(progid))
+    # Preserve order and remove duplicates.
+    result: List[str] = []
+    for key in keys:
+        if key not in result:
+            result.append(key)
+    return result
+
 def registered_menu_keys_from_settings() -> List[str]:
     settings = load_settings()
     exts = normalize_extensions(settings.get("registered_extensions", DEFAULT_EXTENSIONS))
     previous = normalize_extensions(settings.get("last_registered_extensions", []))
     keys = [MENU_KEY_IMAGE]
     for ext in sorted(set(KNOWN_EXTENSIONS + exts + previous)):
-        keys.append(menu_key_for_extension(ext))
+        keys.extend(menu_keys_for_extension(ext, include_resolved_progids=True))
     # Also remove the old all-files key from v7/v8, if present.
     keys.append(r"Software\Classes\*\shell\ExifCopyTool")
-    return keys
+    result: List[str] = []
+    for key in keys:
+        if key not in result:
+            result.append(key)
+    return result
 
 
 def unregister_context_menu() -> None:
@@ -571,11 +692,15 @@ def register_context_menu() -> None:
     formats = load_formats()
     settings = load_settings()
     exts = normalize_extensions(settings.get("registered_extensions", DEFAULT_EXTENSIONS))
-    # Keep the generic image association for environments where it works,
-    # plus explicit extension registrations for predictable visibility.
+    # Keep the generic image association for environments where it works.
     register_one_menu(MENU_KEY_IMAGE, formats, applies_to_images=True)
+    # For each extension, register both extension-based locations and the
+    # automatically resolved file association class/ProgID. This is important
+    # for RAW files such as .arw/.nef/.cr3 where Explorer often ignores
+    # direct extension verbs and reads verbs from the associated class.
     for ext in exts:
-        register_one_menu(menu_key_for_extension(ext), formats, applies_to_images=True)
+        for key in menu_keys_for_extension(ext, include_resolved_progids=True):
+            register_one_menu(key, formats, applies_to_images=True)
     settings["registered_extensions"] = exts
     settings["last_registered_extensions"] = exts
     save_settings(settings)
@@ -633,7 +758,7 @@ class App(tk.Tk):
         ext_entry = ttk.Entry(options, textvariable=self.extensions_var, width=72)
         ext_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=(8, 0))
         ttk.Button(options, text="拡張子を保存して再登録", command=self.on_extensions_changed).grid(row=1, column=2, sticky="e", pady=(8, 0))
-        ttk.Label(options, text="例: .jpg, .jpeg, .png, .heic, .arw, .dng").grid(row=2, column=1, sticky="w", padx=8)
+        ttk.Label(options, text="例: .jpg, .jpeg, .png, .heic, .arw, .cr3, .nef, .raf, .orf, .rw2, .dng").grid(row=2, column=1, sticky="w", padx=8)
         options.columnconfigure(1, weight=1)
         self.status_var = tk.StringVar(value="")
         ttk.Label(options, textvariable=self.status_var).grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
