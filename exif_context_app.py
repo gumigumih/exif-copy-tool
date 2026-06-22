@@ -4,7 +4,7 @@ EXIF Copy Tool - Windows context menu utility.
 Features:
 - GUI for editing output formats
 - Enable/disable Windows right-click menu with a checkbox
-- Register context menu for all files using HKCU\Software\Classes\*\shell
+- Register context menu for all files using HKCU\\Software\\Classes\\*\\shell
 - Automatically updates context menu when formats are saved while enabled
 - Copy EXIF text to clipboard from context menu
 - Uses bundled exiftool.exe when present; falls back to exifread/Pillow
@@ -52,12 +52,19 @@ RELEASES_URL = "https://github.com/gumigumih/exif-copy-tool/releases"
 GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
 _GUI_MUTEX_HANDLE = None
 
-# Context menu is registered for all filesystem objects and all file types.
-# Some Windows/Explorer environments do not show entries registered only under *\shell,
-# so we register both *\shell and AllFilesystemObjects\shell. Directory\shell is not used.
+# Context menu is registered for all filesystem objects and for image/file-type
+# associations. Windows 11 is stricter about which registry roots it surfaces in
+# the main context menu, so we register multiple compatible roots.
 MENU_KEY_ALL_FILES = r"Software\Classes\*\shell\ExifCopyTool"
 MENU_KEY_ALL_FILESYSTEM_OBJECTS = r"Software\Classes\AllFilesystemObjects\shell\ExifCopyTool"
 MENU_KEY_IMAGE = r"Software\Classes\SystemFileAssociations\image\shell\ExifCopyTool"
+WIN11_SHELL_CLSID = "{537C902B-D7F5-4F92-8C58-BC9EC5957F13}"
+WIN11_SHELL_CLSID_KEY = rf"Software\Classes\CLSID\{WIN11_SHELL_CLSID}"
+WIN11_SHELL_INPROC_KEY = rf"{WIN11_SHELL_CLSID_KEY}\InprocServer32"
+WIN11_SHELL_ASSEMBLY = "ExifCopyTool.Win11Shell"
+WIN11_SHELL_CLASS = "ExifCopyTool.Win11Shell.ExplorerCommand"
+WIN11_SHELL_COMHOST = "ExifCopyTool.Win11Shell.comhost.dll"
+WIN11_SHELL_DLL = "ExifCopyTool.Win11Shell.dll"
 
 STANDARD_EXTENSIONS = [".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".webp"]
 RAW_EXTENSIONS = [
@@ -226,6 +233,46 @@ def context_menu_icon_path() -> str:
     if icon:
         return str(icon)
     return executable_parts()[0]
+
+
+def win11_shell_files_exist() -> bool:
+    base = app_dir()
+    return all((base / name).exists() for name in [WIN11_SHELL_COMHOST, WIN11_SHELL_DLL])
+
+
+def win11_shell_server_path() -> Path:
+    return app_dir() / WIN11_SHELL_COMHOST
+
+
+def win11_shell_assembly_path() -> Path:
+    return app_dir() / WIN11_SHELL_DLL
+
+
+def register_win11_shell_server() -> None:
+    if winreg is None:
+        raise RuntimeError("Windows専用機能です")
+    if not win11_shell_files_exist():
+        raise RuntimeError("Win11用シェル拡張ファイルが見つかりません")
+
+    shell_server = win11_shell_server_path()
+    assembly_path = win11_shell_assembly_path()
+    root = winreg.CreateKey(winreg.HKEY_CURRENT_USER, WIN11_SHELL_CLSID_KEY)
+    winreg.SetValueEx(root, "", 0, winreg.REG_SZ, WIN11_SHELL_ASSEMBLY)
+    winreg.SetValueEx(root, "Class", 0, winreg.REG_SZ, WIN11_SHELL_CLASS)
+    winreg.SetValueEx(root, "Assembly", 0, winreg.REG_SZ, WIN11_SHELL_ASSEMBLY)
+    winreg.SetValueEx(root, "RuntimeVersion", 0, winreg.REG_SZ, "v4.0.30319")
+    winreg.SetValueEx(root, "CodeBase", 0, winreg.REG_SZ, assembly_path.as_uri())
+    inproc = winreg.CreateKey(root, "InprocServer32")
+    winreg.SetValueEx(inproc, "", 0, winreg.REG_SZ, str(shell_server))
+    winreg.SetValueEx(inproc, "ThreadingModel", 0, winreg.REG_SZ, "Both")
+    winreg.CloseKey(inproc)
+    winreg.CloseKey(root)
+
+
+def unregister_win11_shell_server() -> None:
+    if winreg is None:
+        return
+    delete_tree(winreg.HKEY_CURRENT_USER, WIN11_SHELL_CLSID_KEY)
 
 
 
@@ -781,9 +828,10 @@ def unregister_context_menu() -> None:
         raise RuntimeError("Windows専用機能です")
     for key in registered_menu_keys_from_settings():
         delete_tree(winreg.HKEY_CURRENT_USER, key)
+    unregister_win11_shell_server()
 
 
-def register_one_menu(menu_root_key: str, formats: List[Dict[str, str]]) -> None:
+def register_one_menu(menu_root_key: str, formats: List[Dict[str, str]], explorer_command_handler: str | None = None) -> None:
     if winreg is None:
         raise RuntimeError("Windows専用機能です")
     exe_parts = executable_parts()
@@ -791,6 +839,8 @@ def register_one_menu(menu_root_key: str, formats: List[Dict[str, str]]) -> None
     winreg.SetValueEx(root, "MUIVerb", 0, winreg.REG_SZ, "EXIF情報をコピー")
     winreg.SetValueEx(root, "SubCommands", 0, winreg.REG_SZ, "")
     winreg.SetValueEx(root, "Icon", 0, winreg.REG_SZ, context_menu_icon_path())
+    if explorer_command_handler:
+        winreg.SetValueEx(root, "ExplorerCommandHandler", 0, winreg.REG_SZ, explorer_command_handler)
     shell_key = winreg.CreateKey(root, "shell")
     for idx, fmt in enumerate(formats):
         key_name = f"format_{idx:02d}"
@@ -817,10 +867,17 @@ def register_context_menu() -> None:
         raise RuntimeError("Windows専用機能です")
     unregister_context_menu()
     formats = load_formats()
-    # Register to both *\shell and AllFilesystemObjects\shell.
-    # Some Explorer environments ignore one of them depending on file association.
-    register_one_menu(MENU_KEY_ALL_FILES, formats)
-    register_one_menu(MENU_KEY_ALL_FILESYSTEM_OBJECTS, formats)
+    win11_available = win11_shell_files_exist()
+    if win11_available:
+        register_win11_shell_server()
+    # Register broadly so the menu appears from both classic Explorer verbs
+    # and Win11-friendly file associations.
+    handler = WIN11_SHELL_CLSID if win11_available else None
+    register_one_menu(MENU_KEY_ALL_FILES, formats, handler)
+    register_one_menu(MENU_KEY_ALL_FILESYSTEM_OBJECTS, formats, handler)
+    register_one_menu(MENU_KEY_IMAGE, formats, handler)
+    for ext in DEFAULT_EXTENSIONS:
+        register_one_menu(menu_key_for_system_extension(ext), formats, handler)
     settings = load_settings()
     settings["context_menu_enabled"] = True
     # Keep this so cleanup can remove old v10/v11 extension registrations.
@@ -841,16 +898,19 @@ def sync_context_menu_enabled(enabled: bool) -> None:
 def is_menu_probably_registered() -> bool:
     if winreg is None:
         return False
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, MENU_KEY_ALL_FILES):
-            return True
-    except Exception:
-        pass
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, MENU_KEY_ALL_FILESYSTEM_OBJECTS):
-            return True
-    except Exception:
-        return False
+    for key in [MENU_KEY_ALL_FILES, MENU_KEY_ALL_FILESYSTEM_OBJECTS, MENU_KEY_IMAGE]:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key):
+                return True
+        except Exception:
+            pass
+    for ext in DEFAULT_EXTENSIONS:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, menu_key_for_system_extension(ext)):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def acquire_gui_single_instance() -> bool:

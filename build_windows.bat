@@ -28,8 +28,13 @@ echo [3/4] Cleaning old build files
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist ExifCopyTool.spec del /q ExifCopyTool.spec
+if exist win11-shell\publish rmdir /s /q win11-shell\publish
 
-echo [4/4] Building ExifCopyTool.exe
+echo [4/4] Building Win11 shell extension
+dotnet publish win11-shell\ExifCopyTool.Win11Shell.csproj -c Release -r win-x64 --self-contained false -o win11-shell\publish
+if errorlevel 1 goto :error
+
+echo [5/5] Building ExifCopyTool.exe
 %PYTHON_CMD% -m PyInstaller --noconsole --onefile --name ExifCopyTool --icon assets\ExifCopyTool.ico --add-data "assets\ExifCopyTool.ico;assets" exif_context_app.py
 if errorlevel 1 goto :error
 

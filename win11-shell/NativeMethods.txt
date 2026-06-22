@@ -1,0 +1,12 @@
+IExplorerCommand
+IEnumExplorerCommand
+IExplorerCommandState
+IExplorerCommandProvider
+IShellItemArray
+IShellItem
+_EXPCMDSTATE
+_EXPCMDFLAGS
+SIGDN
+CLSIDFromString
+StringFromGUID2
+CoTaskMemFree
