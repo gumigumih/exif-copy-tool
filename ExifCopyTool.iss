@@ -1,5 +1,5 @@
 #define MyAppName "ExifCopyTool"
-#define MyAppVersion "0.1.2"
+#define MyAppVersion "0.1.3"
 #define MyAppPublisher "ぐみ ( meggumi.com )"
 #define MyAppExeName "ExifCopyTool.exe"
 

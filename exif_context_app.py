@@ -18,6 +18,7 @@ import subprocess
 import sys
 import traceback
 import time
+import threading
 import ctypes
 import tkinter as tk
 import urllib.error
@@ -46,7 +47,7 @@ except Exception:
 
 APP_NAME = "ExifCopyTool"
 APP_TITLE = "EXIFコピー"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 APP_USER_MODEL_ID = "gumigumih.exif-copy-tool"
 UPDATE_API_URL = "https://api.github.com/repos/gumigumih/exif-copy-tool/releases/latest"
 RELEASES_URL = "https://github.com/gumigumih/exif-copy-tool/releases"
@@ -1114,6 +1115,7 @@ class App(tk.Tk):
                 self.status_var.set(f"右クリックメニューを自動修復しました。({context_menu_mode_label(self.settings)})")
             except Exception as e:
                 self.status_var.set(f"右クリックメニュー自動修復に失敗: {e}")
+        self.after(1500, self.check_updates_on_startup)
 
     def on_close(self) -> None:
         release_gui_single_instance()
@@ -1218,6 +1220,19 @@ class App(tk.Tk):
             self.listbox.selection_set(self.selected_index)
             self.load_selected()
 
+    def check_updates_on_startup(self) -> None:
+        def worker() -> None:
+            try:
+                latest = fetch_latest_release()
+            except Exception:
+                return
+            try:
+                self.after(0, lambda: self._show_update_result(latest, silent=True))
+            except Exception:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def check_updates(self) -> None:
         try:
             latest = fetch_latest_release()
@@ -1243,6 +1258,9 @@ class App(tk.Tk):
             )
             return
 
+        self._show_update_result(latest, silent=False)
+
+    def _show_update_result(self, latest: Dict[str, str], *, silent: bool) -> None:
         tag = latest.get("tag_name") or "取得できません"
         message = f"現在のバージョン: {APP_VERSION}\n最新バージョン: {tag}"
         if tag != "取得できません" and parse_version(tag) > parse_version(APP_VERSION):
@@ -1274,7 +1292,8 @@ class App(tk.Tk):
 
             exit_for_update(self)
             return
-        messagebox.showinfo("更新確認", "最新版です。\n\n" + message)
+        if not silent:
+            messagebox.showinfo("更新確認", "最新版です。\n\n" + message)
 
     def on_enabled_changed(self) -> None:
         try:
