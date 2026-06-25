@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 from tkinter import messagebox, ttk
+from ctypes import wintypes
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -542,6 +543,16 @@ def copy_to_clipboard_tk(text: str, hold_ms: int = 800) -> None:
     root.mainloop()
 
 
+def windows_system_executable(*relative_parts: str, fallback_name: str) -> str:
+    if os.name != "nt":
+        return fallback_name
+    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    candidate = system_root.joinpath(*relative_parts)
+    if candidate.exists():
+        return str(candidate)
+    return shutil.which(fallback_name) or fallback_name
+
+
 def _run_hidden(args, *, input_text: str | None = None) -> str:
     import subprocess
     cp = subprocess.run(
@@ -568,28 +579,117 @@ def copy_to_clipboard_powershell(text: str) -> None:
     if os.name != "nt":
         raise RuntimeError("PowerShell clipboard is only available on Windows")
 
-    # Windows PowerShell 5.1 is available on standard Windows installations.
-    # Send text through STDIN to avoid command-line quoting problems with
-    # Japanese paths, emoji, braces, and newlines.
+    powershell_exe = windows_system_executable(
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+        fallback_name="powershell",
+    )
+
+    # Read stdin explicitly instead of relying on $input so multiline text is
+    # preserved consistently across PowerShell versions and launch contexts.
     _run_hidden(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Set-Clipboard -Value $input"],
+        [
+            powershell_exe,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "$text = [Console]::In.ReadToEnd(); Set-Clipboard -Value $text",
+        ],
         input_text=text,
     )
 
-    # Verify immediately. If another clipboard manager races us, this catches it
-    # and lets the caller try the Tk fallback.
-    got = _run_hidden(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Get-Clipboard -Raw"],
-    )
-    if got.replace("\r\n", "\n").rstrip("\n") != text.replace("\r\n", "\n").rstrip("\n"):
-        raise RuntimeError("PowerShellでコピー後の検証に失敗しました")
+    # Verify with a few short retries because some environments update the
+    # clipboard asynchronously after Set-Clipboard returns.
+    verify_cmd = [
+        powershell_exe,
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Get-Clipboard -Raw",
+    ]
+    for _ in range(4):
+        got = _run_hidden(verify_cmd)
+        if got.replace("\r\n", "\n").rstrip("\n") == text.replace("\r\n", "\n").rstrip("\n"):
+            return
+        time.sleep(0.15)
+    raise RuntimeError("PowerShellでコピー後の検証に失敗しました")
+
+
+def copy_to_clipboard_win32(text: str) -> None:
+    """Fallback using the native Win32 clipboard APIs."""
+    if os.name != "nt":
+        raise RuntimeError("Win32 clipboard is only available on Windows")
+
+    CF_UNICODETEXT = 13
+    GMEM_MOVEABLE = 0x0002
+    kernel32 = ctypes.windll.kernel32
+    user32 = ctypes.windll.user32
+
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.CloseClipboard.argtypes = []
+    user32.CloseClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = wintypes.LPVOID
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalUnlock.restype = wintypes.BOOL
+    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalFree.restype = wintypes.HGLOBAL
+
+    data = ctypes.create_unicode_buffer(text)
+    size_in_bytes = ctypes.sizeof(data)
+
+    last_error: Exception | None = None
+    for _ in range(6):
+        handle = None
+        try:
+            if not user32.OpenClipboard(None):
+                raise ctypes.WinError()
+            try:
+                if not user32.EmptyClipboard():
+                    raise ctypes.WinError()
+                handle = kernel32.GlobalAlloc(GMEM_MOVEABLE, size_in_bytes)
+                if not handle:
+                    raise ctypes.WinError()
+                locked = kernel32.GlobalLock(handle)
+                if not locked:
+                    raise ctypes.WinError()
+                try:
+                    ctypes.memmove(locked, ctypes.addressof(data), size_in_bytes)
+                finally:
+                    kernel32.GlobalUnlock(handle)
+                if not user32.SetClipboardData(CF_UNICODETEXT, handle):
+                    raise ctypes.WinError()
+                handle = None
+                return
+            finally:
+                user32.CloseClipboard()
+        except Exception as exc:
+            last_error = exc
+            time.sleep(0.1)
+        finally:
+            if handle:
+                kernel32.GlobalFree(handle)
+    raise RuntimeError(f"Win32 clipboard API failed: {last_error}")
 
 
 def copy_to_clipboard_clip_exe(text: str) -> None:
     """Last-resort fallback using clip.exe."""
     if os.name != "nt":
         raise RuntimeError("clip.exe is only available on Windows")
-    _run_hidden(["cmd", "/c", "clip"], input_text=text)
+    cmd_exe = windows_system_executable("System32", "cmd.exe", fallback_name="cmd")
+    clip_exe = windows_system_executable("System32", "clip.exe", fallback_name="clip")
+    _run_hidden([cmd_exe, "/c", clip_exe], input_text=text)
 
 
 def show_toast(title: str, message: str) -> None:
@@ -622,15 +722,18 @@ def copy_to_clipboard(text: str) -> None:
 
     v5 behavior:
       1. Windows: PowerShell Set-Clipboard + verification
-      2. Fallback: Tkinter clipboard, held briefly
-      3. Last resort: clip.exe
-
-    The previous native Win32 GlobalAlloc/GlobalLock implementation is removed
-    entirely because it failed on some Explorer context menu launches.
+      2. Fallback: native Win32 clipboard API
+      3. Fallback: Tkinter clipboard, held briefly
+      4. Last resort: clip.exe
     """
     errors: list[str] = []
     if os.name == "nt":
-        for fn in (copy_to_clipboard_powershell, copy_to_clipboard_tk, copy_to_clipboard_clip_exe):
+        for fn in (
+            copy_to_clipboard_powershell,
+            copy_to_clipboard_win32,
+            copy_to_clipboard_tk,
+            copy_to_clipboard_clip_exe,
+        ):
             try:
                 fn(text)  # type: ignore[arg-type]
                 return
@@ -639,6 +742,7 @@ def copy_to_clipboard(text: str) -> None:
         raise RuntimeError("クリップボードへのコピーに失敗しました: " + " / ".join(errors))
 
     copy_to_clipboard_tk(text)
+
 
 def copy_format(format_name: str, image_paths: List[str]) -> None:
     formats = load_formats()
