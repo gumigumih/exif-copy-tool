@@ -1,5 +1,5 @@
 """
-EXIF Copy Tool - Windows context menu utility.
+EXIF Copy Tool - Windows Explorer / macOS Finder utility.
 
 Features:
 - GUI for editing output formats
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,14 @@ RELEASES_URL = "https://github.com/gumigumih/exif-copy-tool/releases"
 INSTALLER_ASSET_NAME = "ExifCopyToolSetup.exe"
 GUI_MUTEX_NAME = "Local\\ExifCopyTool_SettingsWindow"
 _GUI_MUTEX_HANDLE = None
+
+
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
+def is_macos() -> bool:
+    return sys.platform == "darwin"
 
 # Context menu is registered for all filesystem objects and for image/file-type
 # associations. Windows 11 is stricter about which registry roots it surfaces in
@@ -216,7 +225,9 @@ def resource_dir() -> Path:
 def app_icon_path() -> Path | None:
     candidates = [
         app_dir() / "ExifCopyTool.ico",
+        resource_dir() / "assets" / "ExifCopyTool.icns",
         resource_dir() / "assets" / "ExifCopyTool.ico",
+        app_dir() / "assets" / "ExifCopyTool.icns",
         app_dir() / "assets" / "ExifCopyTool.ico",
     ]
     for candidate in candidates:
@@ -235,7 +246,7 @@ def context_menu_icon_path() -> str:
 
 
 def configure_windows_app_identity() -> None:
-    if os.name != "nt":
+    if not is_windows():
         return
     try:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
@@ -248,14 +259,22 @@ def apply_window_icon(window: tk.Tk) -> None:
     if not icon:
         return
     try:
+        if icon.suffix.lower() == ".icns":
+            return
         window.iconbitmap(default=str(icon))
     except Exception:
         pass
 
 
 def data_dir() -> Path:
-    base = os.environ.get("APPDATA")
-    p = Path(base) / APP_NAME if base else app_dir() / "data"
+    if is_windows():
+        base = os.environ.get("APPDATA")
+        p = Path(base) / APP_NAME if base else app_dir() / "data"
+    elif is_macos():
+        p = Path.home() / "Library" / "Application Support" / APP_NAME
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME")
+        p = (Path(base) if base else Path.home() / ".config") / APP_NAME
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -266,6 +285,78 @@ def formats_path() -> Path:
 
 def settings_path() -> Path:
     return data_dir() / "settings.json"
+
+
+def finder_services_dir() -> Path:
+    return Path.home() / "Library" / "Services"
+
+
+def finder_service_executable() -> Path:
+    candidates = [
+        resource_dir() / "packaging" / "macos" / "ExifCopyService",
+        app_dir() / "packaging" / "macos" / "ExifCopyService",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise RuntimeError("Finderサービスの実行ファイルが見つかりません")
+
+
+def sync_finder_format_services(formats: List[Dict[str, str]] | None = None) -> int:
+    """Generate one Finder service per format and return the service count."""
+    if not is_macos():
+        raise RuntimeError("FinderサービスはmacOS専用です")
+    formats = formats or load_formats()
+    services = finder_services_dir()
+    services.mkdir(parents=True, exist_ok=True)
+    for pattern in ("ExifCopyTool-*.workflow", "ExifCopyTool-*.service"):
+        for old in services.glob(pattern):
+            shutil.rmtree(old)
+    # Remove the previous Automator service when upgrading.
+    shutil.rmtree(services / "EXIF情報をコピー.workflow", ignore_errors=True)
+
+    service_executable = finder_service_executable()
+    created = 0
+    for index, fmt in enumerate(formats, start=1):
+        name = str(fmt.get("name", "")).strip()
+        if not name:
+            continue
+        destination = services / f"ExifCopyTool-{index:02d}.service"
+        executable_dir = destination / "Contents" / "MacOS"
+        executable_dir.mkdir(parents=True)
+        executable_path = executable_dir / "ExifCopyService"
+        shutil.copy2(service_executable, executable_path)
+        executable_path.chmod(0o755)
+
+        info = {
+            "CFBundleDevelopmentRegion": "ja",
+            "CFBundleExecutable": "ExifCopyService",
+            "CFBundleIdentifier": f"com.gumigumih.exif-copy-tool.service.{index:02d}",
+            "CFBundleInfoDictionaryVersion": "6.0",
+            "CFBundleName": f"EXIFコピー：{name}",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": APP_VERSION,
+            "LSBackgroundOnly": True,
+            "LSUIElement": True,
+            "NSPrincipalClass": "NSApplication",
+            "NSServices": [{
+                "NSMenuItem": {"default": f"EXIFコピー：{name}"},
+                "NSMessage": "copyExif",
+                "NSPortName": f"com.gumigumih.exif-copy-tool.service.{index:02d}",
+                "NSUserData": name,
+                "NSSendFileTypes": ["public.image", "public.data"],
+                "NSRequiredContext": {"NSApplicationIdentifier": "com.apple.finder"},
+            }],
+        }
+        info_path = destination / "Contents" / "Info.plist"
+        with info_path.open("wb") as f:
+            plistlib.dump(info, f, sort_keys=False)
+        subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", str(destination)], check=True)
+        created += 1
+
+    subprocess.run(["/System/Library/CoreServices/pbs", "-flush"], check=False)
+    subprocess.run(["/System/Library/CoreServices/pbs", "-update"], check=False)
+    return created
 
 
 def load_formats() -> List[Dict[str, str]]:
@@ -332,6 +423,10 @@ def find_exiftool() -> str | None:
         app_dir() / "exiftool(-k).exe",
         app_dir() / "tools" / "exiftool.exe",
         app_dir() / "tools" / "exiftool(-k).exe",
+        resource_dir() / "exiftool",
+        resource_dir() / "tools" / "exiftool",
+        Path("/opt/homebrew/bin/exiftool"),
+        Path("/usr/local/bin/exiftool"),
     ]
     for c in candidates:
         if c.exists():
@@ -693,8 +788,69 @@ def copy_to_clipboard_clip_exe(text: str) -> None:
     _run_hidden([cmd_exe, "/c", clip_exe], input_text=text)
 
 
+def copy_to_clipboard_pbcopy(text: str) -> None:
+    """Copy text with the native macOS clipboard command."""
+    if not is_macos():
+        raise RuntimeError("pbcopy is only available on macOS")
+    _run_hidden(["/usr/bin/pbcopy"], input_text=text)
+
+
+def copy_to_clipboard_osascript(text: str) -> None:
+    """Copy through the macOS pasteboard broker used by GUI applications."""
+    if not is_macos():
+        raise RuntimeError("AppleScript clipboard is only available on macOS")
+    script = "on run argv\nset the clipboard to item 1 of argv\nend run"
+    _run_hidden(["/usr/bin/osascript", "-e", script, text])
+
+
+def choose_format_macos(formats: List[Dict[str, str]]) -> str | None:
+    """Show a native macOS format picker and return the selected name."""
+    if not is_macos():
+        raise RuntimeError("フォーマット選択ダイアログはmacOS専用です")
+    names = [fmt.get("name", "").strip() for fmt in formats if fmt.get("name", "").strip()]
+    if not names:
+        return None
+    script = (
+        "on run argv\n"
+        "set picked to choose from list argv with title \"EXIFコピー\" "
+        "with prompt \"コピーするフォーマットを選択してください\" "
+        "default items {item 1 of argv} OK button name \"コピー\" cancel button name \"キャンセル\"\n"
+        "if picked is false then return \"\"\n"
+        "return item 1 of picked\n"
+        "end run"
+    )
+    cp = subprocess.run(
+        ["/usr/bin/osascript", "-e", script, *names],
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+    )
+    if cp.returncode != 0:
+        # AppleScript reports user cancellation as an error on some macOS versions.
+        if cp.returncode == 1 and "User canceled" in cp.stderr:
+            return None
+        raise RuntimeError((cp.stderr or "フォーマット選択に失敗しました").strip())
+    selected = cp.stdout.strip()
+    return selected if selected in names else None
+
+
 def show_toast(title: str, message: str) -> None:
-    if os.name != "nt":
+    if is_macos():
+        script = (
+            "on run argv\n"
+            "display notification (item 2 of argv) with title (item 1 of argv)\n"
+            "end run"
+        )
+        try:
+            subprocess.Popen(
+                ["/usr/bin/osascript", "-e", script, title, message],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+        return
+    if not is_windows():
         return
     script = """
 Add-Type -AssemblyName System.Windows.Forms
@@ -728,7 +884,7 @@ def copy_to_clipboard(text: str) -> None:
       4. Last resort: clip.exe
     """
     errors: list[str] = []
-    if os.name == "nt":
+    if is_windows():
         for fn in (
             copy_to_clipboard_powershell,
             copy_to_clipboard_win32,
@@ -739,13 +895,21 @@ def copy_to_clipboard(text: str) -> None:
                 fn(text)  # type: ignore[arg-type]
                 return
             except Exception as e:
-                errors.append(f"{fn.__name__}: {e}")
+                errors.append(f"{getattr(fn, '__name__', type(fn).__name__)}: {e}")
         raise RuntimeError("クリップボードへのコピーに失敗しました: " + " / ".join(errors))
 
+    if is_macos():
+        errors: list[str] = []
+        for fn in (copy_to_clipboard_osascript, copy_to_clipboard_tk, copy_to_clipboard_pbcopy):
+            try:
+                fn(text)  # type: ignore[arg-type]
+                return
+            except Exception as e:
+                errors.append(f"{getattr(fn, '__name__', type(fn).__name__)}: {e}")
+        raise RuntimeError("クリップボードへのコピーに失敗しました: " + " / ".join(errors))
     copy_to_clipboard_tk(text)
 
-
-def copy_format(format_name: str, image_paths: List[str]) -> None:
+def render_format_text(format_name: str, image_paths: List[str]) -> str:
     formats = load_formats()
     fmt = next((f for f in formats if f["name"] == format_name), formats[0] if formats else DEFAULT_FORMATS[0])
     rendered = []
@@ -757,7 +921,11 @@ def copy_format(format_name: str, image_paths: List[str]) -> None:
             if data.get("Error"):
                 text += f"\n{data['Error']}"
         rendered.append(text)
-    final_text = "\n\n".join(rendered)
+    return "\n\n".join(rendered)
+
+
+def copy_format(format_name: str, image_paths: List[str]) -> None:
+    final_text = render_format_text(format_name, image_paths)
     copy_to_clipboard(final_text)
     show_toast(APP_TITLE, f"{len(image_paths)}件のEXIF情報をコピーしました")
     write_context_log(format_name, image_paths, final_text, None)
@@ -1075,7 +1243,16 @@ def acquire_gui_single_instance() -> bool:
         _GUI_MUTEX_HANDLE = str(lock_path)
         return True
     except FileExistsError:
-        return False
+        # Recover a lock left behind after a crash. A live process keeps it.
+        try:
+            old_pid = int(lock_path.read_text(encoding="ascii").strip())
+            os.kill(old_pid, 0)
+            return False
+        except ProcessLookupError:
+            lock_path.unlink(missing_ok=True)
+            return acquire_gui_single_instance()
+        except (OSError, ValueError):
+            return False
 
 
 def release_gui_single_instance() -> None:
@@ -1174,10 +1351,15 @@ class App(tk.Tk):
         self.preview = tk.Text(right, height=12, wrap="word")
         self.preview.pack(fill="both")
 
-        options = ttk.LabelFrame(settings_tab, text="右クリックメニュー", padding=8)
+        menu_title = "Finderクイックアクション" if is_macos() else "右クリックメニュー"
+        options = ttk.LabelFrame(settings_tab, text=menu_title, padding=8)
         options.pack(fill="x", pady=(0, 10))
-        self.enabled_var = tk.BooleanVar(value=bool(self.settings.get("context_menu_enabled", True)))
-        ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed).grid(row=0, column=0, sticky="w")
+        menu_enabled = bool(self.settings.get("context_menu_enabled", True)) if is_windows() else False
+        self.enabled_var = tk.BooleanVar(value=menu_enabled)
+        self.enabled_check = ttk.Checkbutton(options, text="有効にする", variable=self.enabled_var, command=self.on_enabled_changed)
+        self.enabled_check.grid(row=0, column=0, sticky="w")
+        if not is_windows():
+            self.enabled_check.state(["disabled"])
         options.columnconfigure(0, weight=1)
         self.status_var = tk.StringVar(value="")
         ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
@@ -1189,6 +1371,10 @@ class App(tk.Tk):
         app_info.columnconfigure(0, weight=1)
 
     def _refresh_status(self) -> None:
+        if is_macos():
+            count = len(list(finder_services_dir().glob("ExifCopyTool-*.service")))
+            self.status_var.set(f"Finderサービス：{count}件登録済み")
+            return
         if winreg is None:
             self.status_var.set("Windows以外では右クリック登録不可")
             return
@@ -1206,8 +1392,11 @@ class App(tk.Tk):
 
     def _auto_update_menu_if_enabled(self) -> None:
         settings = load_settings()
-        if settings.get("context_menu_enabled"):
+        if is_windows() and settings.get("context_menu_enabled"):
             register_context_menu(*get_context_menu_modes(settings))
+            self._refresh_status()
+        elif is_macos():
+            sync_finder_format_services(self.formats)
             self._refresh_status()
 
     def _refresh_list(self) -> None:
@@ -1359,7 +1548,8 @@ class App(tk.Tk):
             messagebox.showerror("右クリック更新失敗", str(e))
             return
         if show_message:
-            messagebox.showinfo("保存しました", "フォーマットを保存しました。有効化済みの場合、右クリックメニューにも自動反映しました。")
+            detail = "有効化済みの場合、右クリックメニューにも自動反映しました。" if is_windows() else "Finderクイックアクションでは先頭のフォーマットを使用します。"
+            messagebox.showinfo("保存しました", "フォーマットを保存しました。" + detail)
 
     def add_format(self) -> None:
         self.formats.append({"name": "新しいフォーマット", "template": "{Make} {Model}\n{LensModel}\n{FocalLength} / F{FNumber} / {ExposureTime} / ISO{ISO}"})
@@ -1394,6 +1584,9 @@ def main() -> None:
             save_settings(settings)
             unregister_context_menu()
             return
+        if "--install-finder-services" in sys.argv:
+            sync_finder_format_services()
+            return
         if "--copy" in sys.argv:
             i = sys.argv.index("--copy")
             fmt = sys.argv[i + 1]
@@ -1408,6 +1601,45 @@ def main() -> None:
                 show_toast(APP_TITLE, "EXIF情報のコピーに失敗しました")
                 raise
             return
+        if "--render-to" in sys.argv:
+            i = sys.argv.index("--render-to")
+            output_path = Path(sys.argv[i + 1])
+            fmt = sys.argv[i + 2]
+            paths = sys.argv[i + 3:]
+            if not paths:
+                raise RuntimeError("画像ファイルが指定されていません")
+            rendered_text = render_format_text(fmt, paths)
+            output_path.write_text(rendered_text, encoding="utf-8")
+            write_context_log(fmt, paths, rendered_text, None)
+            return
+        if "--copy-default" in sys.argv:
+            i = sys.argv.index("--copy-default")
+            paths = sys.argv[i + 1:]
+            if not paths:
+                raise RuntimeError("画像ファイルが指定されていません")
+            formats = load_formats()
+            default_name = formats[0]["name"] if formats else DEFAULT_FORMATS[0]["name"]
+            copy_format(default_name, paths)
+            return
+        if "--choose-format" in sys.argv:
+            i = sys.argv.index("--choose-format")
+            paths = sys.argv[i + 1:]
+            if not paths:
+                raise RuntimeError("画像ファイルが指定されていません")
+            formats = load_formats()
+            selected_name = choose_format_macos(formats)
+            if selected_name:
+                copy_format(selected_name, paths)
+            return
+        # Files dropped on the macOS app are delivered as ordinary arguments.
+        # PyInstaller can also add a -psn_* process argument; ignore it.
+        if is_macos():
+            opened_paths = [arg for arg in sys.argv[1:] if not arg.startswith("-psn_") and Path(arg).is_file()]
+            if opened_paths:
+                formats = load_formats()
+                default_name = formats[0]["name"] if formats else DEFAULT_FORMATS[0]["name"]
+                copy_format(default_name, opened_paths)
+                return
         if not acquire_gui_single_instance():
             try:
                 messagebox.showinfo("EXIFコピー", "設定画面はすでに開いています。")
