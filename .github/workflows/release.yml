@@ -52,12 +52,14 @@ jobs:
           New-Item -ItemType Directory -Force installer | Out-Null
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" packaging/windows/ExifCopyTool.iss
 
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: |
+          name: release-windows
+          path: |
             dist/ExifCopyTool.zip
             installer/ExifCopyToolSetup.exe
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-15
@@ -82,16 +84,44 @@ jobs:
 
       - name: Validate macOS resources
         run: |
+          test "$(uname -m)" = "arm64"
           python -c 'import tkinter; assert tkinter.TkVersion >= 8.6'
-          xcrun swiftc -module-cache-path /tmp/exif-copy-swift-module-cache -framework AppKit packaging/macos/ExifCopyService.swift -o /tmp/ExifCopyService
+          xcrun swiftc -target arm64-apple-macos13.0 -module-cache-path /tmp/exif-copy-swift-module-cache -framework AppKit packaging/macos/ExifCopyService.swift -o /tmp/ExifCopyService
 
       - name: Build macOS app and DMG
         run: ./packaging/macos/build_macos.sh
 
       - name: Verify DMG
-        run: hdiutil verify dist/ExifCopyTool-macOS.dmg
+        run: |
+          file dist/ExifCopyTool.app/Contents/MacOS/ExifCopyTool | grep -q arm64
+          file dist/ExifCopyTool.app/Contents/Frameworks/packaging/macos/ExifCopyService | grep -q arm64
+          codesign --verify --deep --strict --verbose=2 dist/ExifCopyTool.app
+          hdiutil verify dist/ExifCopyTool-macOS.dmg
 
-      - name: Upload macOS release asset
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: dist/ExifCopyTool-macOS.dmg
+          if-no-files-found: error
+
+  publish-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/ExifCopyTool-macOS.dmg
+          files: |
+            release-assets/ExifCopyTool.zip
+            release-assets/ExifCopyToolSetup.exe
+            release-assets/ExifCopyTool-macOS.dmg
+          fail_on_unmatched_files: true
