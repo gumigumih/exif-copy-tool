@@ -110,6 +110,7 @@ ALL_MENU_KEYS = [MENU_KEY_IMAGE] + [menu_key_for_system_extension(ext) for ext i
 DEFAULT_SETTINGS = {
     "context_menu_enabled": True,
     "classic_context_menu_enabled": True,
+    "notifications_enabled": False,
 }
 
 DEFAULT_FORMATS = [
@@ -388,6 +389,8 @@ def load_settings() -> Dict[str, Any]:
                 legacy_enabled = bool(loaded.get("context_menu_enabled", True))
                 if "classic_context_menu_enabled" not in loaded:
                     s["classic_context_menu_enabled"] = legacy_enabled
+                if "notifications_enabled" not in loaded and "macos_notifications_enabled" in loaded:
+                    s["notifications_enabled"] = bool(loaded["macos_notifications_enabled"])
         except Exception:
             pass
     s["context_menu_enabled"] = bool(s.get("context_menu_enabled", False))
@@ -927,7 +930,8 @@ def render_format_text(format_name: str, image_paths: List[str]) -> str:
 def copy_format(format_name: str, image_paths: List[str]) -> None:
     final_text = render_format_text(format_name, image_paths)
     copy_to_clipboard(final_text)
-    show_toast(APP_TITLE, f"{len(image_paths)}件のEXIF情報をコピーしました")
+    if load_settings().get("notifications_enabled", False):
+        show_toast(APP_TITLE, f"{len(image_paths)}件のEXIF情報をコピーしました")
     write_context_log(format_name, image_paths, final_text, None)
 
 
@@ -1364,6 +1368,17 @@ class App(tk.Tk):
         self.status_var = tk.StringVar(value="")
         ttk.Label(options, textvariable=self.status_var).grid(row=1, column=0, sticky="w", pady=(8, 0))
 
+        if is_macos() or is_windows():
+            notifications = ttk.LabelFrame(settings_tab, text="通知", padding=8)
+            notifications.pack(fill="x", pady=(0, 10))
+            self.notifications_var = tk.BooleanVar(value=bool(self.settings.get("notifications_enabled", False)))
+            ttk.Checkbutton(
+                notifications,
+                text="コピー完了時に通知を表示する",
+                variable=self.notifications_var,
+                command=self.on_notifications_changed,
+            ).pack(anchor="w")
+
         app_info = ttk.LabelFrame(settings_tab, text="アプリ情報", padding=8)
         app_info.pack(fill="x", pady=(0, 10))
         ttk.Label(app_info, text=f"現在のバージョン: {APP_VERSION}").grid(row=0, column=0, sticky="w")
@@ -1492,6 +1507,10 @@ class App(tk.Tk):
             self.enabled_var.set(False)
             self._refresh_status()
             messagebox.showerror("右クリック設定エラー", str(e))
+
+    def on_notifications_changed(self) -> None:
+        self.settings["notifications_enabled"] = bool(self.notifications_var.get())
+        save_settings(self.settings)
 
 
     def on_select(self, _event: Any = None) -> None:

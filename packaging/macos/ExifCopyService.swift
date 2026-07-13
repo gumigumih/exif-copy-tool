@@ -40,10 +40,12 @@ final class ExifCopyServiceProvider: NSObject {
                 throw ServiceError("クリップボードへの書き込みに失敗しました")
             }
 
-            let notification = NSUserNotification()
-            notification.title = "EXIFコピー"
-            notification.informativeText = "EXIF情報をコピーしました"
-            NSUserNotificationCenter.default.deliver(notification)
+            if notificationsEnabled() {
+                let notification = NSUserNotification()
+                notification.title = "EXIFコピー"
+                notification.informativeText = "EXIF情報をコピーしました"
+                NSUserNotificationCenter.default.deliver(notification)
+            }
         } catch let serviceError {
             error.pointee = serviceError.localizedDescription as NSString
         }
@@ -60,6 +62,17 @@ final class ExifCopyServiceProvider: NSObject {
             return paths
         }
         throw ServiceError("画像ファイルを取得できませんでした")
+    }
+
+    private func notificationsEnabled() -> Bool {
+        let settingsURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/ExifCopyTool/settings.json")
+        guard let data = try? Data(contentsOf: settingsURL),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let enabled = (object["notifications_enabled"] ?? object["macos_notifications_enabled"]) as? Bool else {
+            return false
+        }
+        return enabled
     }
 
 }

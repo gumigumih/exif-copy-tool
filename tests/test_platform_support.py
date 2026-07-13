@@ -8,6 +8,26 @@ import exif_context_app as app
 
 
 class PlatformSupportTests(unittest.TestCase):
+    def test_copy_notifications_are_disabled_by_default(self) -> None:
+        self.assertFalse(app.DEFAULT_SETTINGS["notifications_enabled"])
+
+    def test_copy_success_notification_respects_setting(self) -> None:
+        with mock.patch.object(app, "render_format_text", return_value="EXIF"), \
+                mock.patch.object(app, "copy_to_clipboard"), \
+                mock.patch.object(app, "write_context_log"), \
+                mock.patch.object(app, "show_toast") as toast, \
+                mock.patch.object(app, "load_settings", return_value={"notifications_enabled": False}):
+            app.copy_format("撮影設定", ["photo.jpg"])
+            toast.assert_not_called()
+
+        with mock.patch.object(app, "render_format_text", return_value="EXIF"), \
+                mock.patch.object(app, "copy_to_clipboard"), \
+                mock.patch.object(app, "write_context_log"), \
+                mock.patch.object(app, "show_toast") as toast, \
+                mock.patch.object(app, "load_settings", return_value={"notifications_enabled": True}):
+            app.copy_format("撮影設定", ["photo.jpg"])
+            toast.assert_called_once()
+
     def test_generates_one_finder_service_per_format(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as helper_tmp, \
                 mock.patch.object(app, "is_macos", return_value=True), \
