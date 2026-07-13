@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Exif Copy Tool</title>
-  <meta name="description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows向けツール。">
+  <meta name="description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows・macOS対応ツール。">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Exif Copy Tool">
-  <meta property="og:description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows向けツール。">
+  <meta property="og:description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows・macOS対応ツール。">
   <meta property="og:image" content="assets/ogp.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Exif Copy Tool">
-  <meta name="twitter:description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows向けツール。">
+  <meta name="twitter:description" content="写真のEXIF情報を、右クリックからすばやくコピーできるWindows・macOS対応ツール。">
   <meta name="twitter:image" content="assets/ogp.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,16 +22,16 @@
   <header class="border-b border-line bg-white/90 backdrop-blur-sm">
     <div class="mx-auto min-h-[calc(82svh-4rem)] w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
       <div class="mt-8 space-y-8">
-        <div class="grid gap-10 grid-cols-2">
+        <div class="grid gap-10 lg:grid-cols-2">
           <div class="space-y-4">
             <div class="space-y-4">
-              <span class="text-sm font-semibold uppercase tracking-[0.14em] text-accent">Windows right-click EXIF copier</span>
+              <span class="text-sm font-semibold uppercase tracking-[0.14em] text-accent">Windows &amp; macOS EXIF copier</span>
               <h1 class="max-w-4xl text-5xl font-semibold tracking-normal text-ink sm:text-6xl lg:text-7xl">Exif Copy Tool</h1>
-              <p class="max-w-3xl text-lg leading-8 text-muted sm:text-xl">写真を右クリックしてフォーマットを選ぶだけで、投稿用のEXIF情報をそのままコピーできるWindows向けツールです。Windows 11 でも右クリックメニューから利用できます。</p>
+              <p class="max-w-3xl text-lg leading-8 text-muted sm:text-xl">写真を右クリックしてフォーマットを選ぶだけで、投稿用のEXIF情報をそのままコピーできます。Windowsの右クリックメニューとmacOS Finderのサービスに対応しています。</p>
             </div>
             <div class="flex flex-wrap items-center gap-3">
-              <a class="inline-flex min-h-[3rem] items-center justify-center rounded-lg bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-deep" href="https://github.com/gumigumih/exif-copy-tool/releases/latest/download/ExifCopyToolSetup.exe">インストーラーをダウンロード</a>
-              <a class="inline-flex min-h-[3rem] items-center justify-center rounded-lg border border-line bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand" href="https://github.com/gumigumih/exif-copy-tool/releases/latest">リリースを見る</a>
+              <a class="inline-flex min-h-[3rem] items-center justify-center rounded-lg bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-deep" href="https://github.com/gumigumih/exif-copy-tool/releases/latest">最新版をリリースページで確認</a>
+              <span class="text-sm text-muted">ページ内のAssetsからWindows版またはmacOS版を選べます。</span>
             </div>
           </div>
           <div class="overflow-hidden rounded-lg border border-line bg-night text-slate-100 shadow-[0_18px_50px_rgba(23,32,51,0.08)]">
@@ -81,6 +81,34 @@
   <main class="py-16 sm:py-20 space-y-16 sm:space-y-20">
     <section>
       <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 space-y-4">
+        <h2 class="text-3xl font-semibold tracking-normal text-ink sm:text-4xl">インストール</h2>
+        <div class="grid gap-4 lg:grid-cols-2">
+          <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_14px_34px_rgba(23,32,51,0.06)] sm:p-8">
+            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-accent">Windows 10 / 11</p>
+            <h3 class="mt-3 text-xl font-semibold text-ink">Windows版</h3>
+            <ol class="mt-4 space-y-3 text-sm leading-7 text-muted">
+              <li><span class="font-semibold text-ink">1.</span> <code>ExifCopyToolSetup.exe</code> をダウンローします。</li>
+              <li><span class="font-semibold text-ink">2.</span> インストーラーを実行し、画面の案内に従います。</li>
+            </ol>
+          </article>
+          <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_14px_34px_rgba(23,32,51,0.06)] sm:p-8">
+            <p class="text-sm font-semibold uppercase tracking-[0.14em] text-accent">Apple Silicon / macOS 13+</p>
+            <h3 class="mt-3 text-xl font-semibold text-ink">macOS版</h3>
+            <ol class="mt-4 space-y-3 text-sm leading-7 text-muted">
+              <li><span class="font-semibold text-ink">1.</span> DMG内の <code>ExifCopyTool.app</code> を「Applications」へドラッグします。</li>
+              <li><span class="font-semibold text-ink">2.</span> <code>クイックアクションをインストール.command</code> を実行します。</li>
+            </ol>
+            <div class="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-900">
+              <p class="font-semibold">初回起動時にmacOSの警告が出る場合があります</p>
+              <p class="mt-1">Finderで対象をControlキーを押しながらクリックし、「開く」を選んでください。アプリとインストール用commandのそれぞれで必要になることがあります。</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 space-y-4">
         <h2 class="text-3xl font-semibold tracking-normal text-ink sm:text-4xl">こんな方におすすめ</h2>
         <div class="grid gap-4 lg:grid-cols-3">
           <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_14px_34px_rgba(23,32,51,0.06)]">
@@ -125,7 +153,7 @@
         <div class="grid gap-4 lg:grid-cols-3">
           <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_14px_34px_rgba(23,32,51,0.06)]">
             <h3 class="text-xl font-semibold text-ink">右クリック表示</h3>
-            <p class="mt-3 text-sm leading-7 text-muted">拡張子で絞り込まず、Windowsの右クリックメニューに表示します。</p>
+            <p class="mt-3 text-sm leading-7 text-muted">拡張子で絞り込まず、Windowsの右クリックメニューまたはmacOS Finderのサービスから利用できます。</p>
           </article>
           <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_14px_34px_rgba(23,32,51,0.06)]">
             <h3 class="text-xl font-semibold text-ink">主な想定ファイル</h3>
@@ -145,26 +173,36 @@
         <div class="grid gap-6 lg:grid-cols-2 lg:items-start">
           <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_18px_50px_rgba(23,32,51,0.08)] sm:p-8">
             <div class="grid gap-4">
-              <div class="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
-                <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">1</span>
-                <div>
-                  <h3 class="text-lg font-semibold text-ink">右クリックで EXIF コピー</h3>
-                  <p class="mt-2 text-sm leading-7 text-muted">写真ファイルを右クリックし、「EXIF情報をコピー」から使いたい形式を選ぶと、カメラ名・レンズ名・焦点距離・F値・ISO感度などを整形してコピーできます。</p>
-                </div>
+              <span class="w-fit rounded-full bg-mist px-3 py-1 text-xs font-semibold text-brand">Windows</span>
+              <div>
+                <h3 class="text-xl font-semibold text-ink">Windowsの右クリックメニュー</h3>
+                <p class="mt-2 text-sm leading-7 text-muted">写真ファイルを右クリックし、「EXIF情報をコピー」から使いたい形式を選べます。</p>
               </div>
-              <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/context-menu.png" alt="Exif Copy Tool の右クリックメニュー表示例" loading="lazy">
+              <figure>
+                <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/context-menu.png" alt="Windows版 Exif Copy Tool の右クリックメニュー" loading="lazy">
+                <figcaption class="mt-2 text-xs leading-5 text-muted">Windowsの右クリックメニューからフォーマットを選択</figcaption>
+              </figure>
+              <figure>
+                <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/format-editor.png" alt="Windows版 Exif Copy Tool のフォーマット編集画面" loading="lazy">
+                <figcaption class="mt-2 text-xs leading-5 text-muted">Windows版のフォーマット追加・編集画面</figcaption>
+              </figure>
             </div>
           </article>
           <article class="rounded-lg border border-line bg-panel p-6 shadow-[0_18px_50px_rgba(23,32,51,0.08)] sm:p-8">
             <div class="grid gap-4">
-              <div class="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
-                <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">2</span>
-                <div>
-                  <h3 class="text-lg font-semibold text-ink">フォーマット追加・編集</h3>
-                  <p class="mt-2 text-sm leading-7 text-muted">SNS向け、ブログ向け、記録用など、自分の使い方に合わせてフォーマットを追加したり、表示する項目や並び順を編集したりできます。</p>
-                </div>
+              <span class="w-fit rounded-full bg-mist px-3 py-1 text-xs font-semibold text-accent">macOS</span>
+              <div>
+                <h3 class="text-xl font-semibold text-ink">macOS Finderの右クリックメニュー</h3>
+                <p class="mt-2 text-sm leading-7 text-muted">写真を右クリックし、右クリックメニューの「サービス」から使いたいEXIFコピー形式を選べます。</p>
               </div>
-              <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/format-editor.png" alt="Exif Copy Tool のフォーマット追加・編集画面" loading="lazy">
+              <figure>
+                <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/macos-finder-services.png" alt="macOS Finderの右クリックメニューからEXIFコピー形式を選ぶ画面" loading="lazy">
+                <figcaption class="mt-2 text-xs leading-5 text-muted">macOS Finderの右クリックメニューの「サービス」からフォーマットを選択</figcaption>
+              </figure>
+              <figure>
+                <img class="w-full rounded-md border border-line shadow-[0_14px_34px_rgba(23,32,51,0.08)]" src="assets/macos-format-editor.jpg" alt="macOS版 Exif Copy Tool のフォーマット編集画面" loading="lazy">
+                <figcaption class="mt-2 text-xs leading-5 text-muted">Mac版のフォーマット追加・編集画面</figcaption>
+              </figure>
             </div>
           </article>
         </div>
