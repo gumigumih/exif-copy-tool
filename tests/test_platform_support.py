@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import plistlib
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -50,7 +51,8 @@ class PlatformSupportTests(unittest.TestCase):
             self.assertIn("public.image", service["NSSendFileTypes"])
             executable = generated[1] / "Contents" / "MacOS" / "ExifCopyService"
             self.assertTrue(executable.is_file())
-            self.assertTrue(executable.stat().st_mode & 0o111)
+            if os.name != "nt":
+                self.assertTrue(executable.stat().st_mode & 0o111)
 
     def test_windows_data_dir_contract_is_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, \
