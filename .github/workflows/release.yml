@@ -121,7 +121,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/ExifCopyTool.zip
-            release-assets/ExifCopyToolSetup.exe
+            release-assets/dist/ExifCopyTool.zip
+            release-assets/installer/ExifCopyToolSetup.exe
             release-assets/ExifCopyTool-macOS.dmg
           fail_on_unmatched_files: true
