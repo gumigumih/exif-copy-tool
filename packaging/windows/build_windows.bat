@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-pushd "%~dp0"
+pushd "%~dp0\..\.."
 
 echo [1/4] Checking Python
 where python >nul 2>nul

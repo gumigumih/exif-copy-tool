@@ -1,10 +1,10 @@
 @echo off
 setlocal EnableExtensions
-pushd "%~dp0"
+pushd "%~dp0\..\.."
 
 if not exist "dist\ExifCopyTool\ExifCopyTool.exe" (
   echo dist\ExifCopyTool\ExifCopyTool.exe was not found.
-  echo Run build_windows.bat first.
+  echo Run packaging\windows\build_windows.bat first.
   pause
   popd
   exit /b 1
@@ -24,7 +24,7 @@ if "%ISCC%"=="" (
 )
 
 if exist installer rmdir /s /q installer
-"%ISCC%" ExifCopyTool.iss
+"%ISCC%" packaging\windows\ExifCopyTool.iss
 if errorlevel 1 goto :error
 
 echo.

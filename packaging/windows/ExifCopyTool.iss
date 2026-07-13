@@ -2,6 +2,7 @@
 #define MyAppVersion "0.1.3"
 #define MyAppPublisher "ぐみ ( meggumi.com )"
 #define MyAppExeName "ExifCopyTool.exe"
+#define RepoRoot SourcePath + "\..\.."
 
 [Setup]
 AppId={{A39C53E9-0365-4BCB-B901-55B8C0D4A15F}
@@ -19,13 +20,13 @@ DisableDirPage=yes
 UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=installer
+OutputDir={#RepoRoot}\installer
 OutputBaseFilename=ExifCopyToolSetup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
-SetupIconFile=assets\ExifCopyTool.ico
+SetupIconFile={#RepoRoot}\assets\ExifCopyTool.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
@@ -36,9 +37,9 @@ Name: "contextmenu"; Description: "右クリックメニューを有効にする
 Name: "desktopicon"; Description: "デスクトップにショートカットを作成"; GroupDescription: "ショートカット:"; Flags: unchecked
 
 [Files]
-Source: "dist\ExifCopyTool\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "assets\ExifCopyTool.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "exiftool.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#RepoRoot}\dist\ExifCopyTool\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#RepoRoot}\assets\ExifCopyTool.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#RepoRoot}\exiftool.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
